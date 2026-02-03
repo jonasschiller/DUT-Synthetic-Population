@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import os
 import sys
-import torch 
+import torch # PyTorch 임포트
 import plotly.io as pio
 import kaleido
 import optuna
@@ -25,6 +25,7 @@ else:
     device = torch.device('cpu')
     print('CUDA (GPU)를 사용할 수 없습니다. CPU를 사용합니다.')
 
+
 ctab_gan_plus_path = r"C:\Users\ADMIN\SEM\CTAB-GAN-Plus"
 
 sys.path.append(ctab_gan_plus_path)
@@ -36,13 +37,13 @@ except ImportError:
     print(f"'{ctab_gan_plus_path}' 경로와 'model/ctabgan.py' 파일이 올바른지 확인해주세요.")
     sys.exit(1)
 
-original_data_path = r"C:\Users\ADMIN\SEM\DUT\travel survey 기반 가상인구\travel_survey_preprocessed_sejong+daejeon.csv"
+original_data_path = r"C:\Users\ADMIN\SEM\DUT\travel survey 기반 가상인구\travel_survey_preprocessed_sejong+daejeon_filled.csv"
 original_data = pd.read_csv(original_data_path, encoding='utf-8-sig', engine='python')
-output_base_path = r"\Users\ADMIN\SEM\DUT\travel survey 기반 가상인구\travel_survey_generated_sejong+daejeon.csv"
+output_base_path = r"\Users\ADMIN\SEM\DUT\travel survey 기반 가상인구\travel_survey_generated_sejong+daejeon_filled.csv"
 
 
 try:
-    print(f"원본 데이터 로드 완료: {original_data_path} (data type: {original_data.shape})")
+    print(f"원본 데이터 로드 완료: {original_data_path} (형태: {original_data.shape})")
 except FileNotFoundError:
     print(f"오류: 원본 데이터 파일을 찾을 수 없습니다. 경로를 확인하세요: {original_data_path}")
     sys.exit(1)
@@ -51,8 +52,9 @@ all_columns = original_data.columns.tolist()
 categorical_columns = [col for col in all_columns if col not in ['age']]
 integer_columns = ['age']
 
-print(f"number of categorical columns: ({len(categorical_columns)}): {categorical_columns}")
-print(f"number of integer columns ({len(integer_columns)}): {integer_columns}")
+print(f"범주형 컬럼 ({len(categorical_columns)}개): {categorical_columns}")
+print(f"정수형 컬럼 ({len(integer_columns)}개): {integer_columns}")
+
 
 original_data = original_data[
     (original_data['home_province'] == '대전광역시') |
@@ -72,13 +74,15 @@ print("세종 응답자 수:", len(sejong))
 category_counts = sejong['home_administrative'].value_counts()
 print("세종 행정동 수: ", len(category_counts))
 
-import gc 
-from sdv.metadata import SingleTableMetadata
-from sdv.evaluation.single_table import evaluate_quality
 
+import gc 
+
+from sdv.metadata import SingleTableMetadata
+from sdv.evaluation.single_table import evaluate_quality 
 os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
 
 data_folder = os.path.dirname(original_data_path)
+
 
 try:
     original_data = pd.read_csv(original_data_path, encoding='utf-8-sig', engine='python')
@@ -89,13 +93,13 @@ except FileNotFoundError:
 
 
 def objective(trial):
-    
+
     batch_size = trial.suggest_categorical('batch_size', [128, 256, 512, 1024])
     epochs = trial.suggest_int('epochs', 500, 1500, step=100) 
     lr_g = trial.suggest_loguniform('lr_g', 1e-4, 1e-3)
     lr_d = trial.suggest_loguniform('lr_d', 1e-4, 1e-3)
     lr_c = trial.suggest_loguniform('lr_c', 1e-4, 1e-3)
-    lambda_gp = trial.suggest_loguniform('lambda_gp', 1.0, 30.0) 
+    lambda_gp = trial.suggest_loguniform('lambda_gp', 1.0, 30.0)
     gumbel_tau = trial.suggest_uniform('gumbel_tau', 0.1, 1.0)
 
     print(f"\nTrial {trial.number}: CTABGAN 모델 초기화를 시작합니다...")
@@ -143,10 +147,14 @@ def objective(trial):
 
     try:
         synthesizer.fit(trial=trial) 
-        synthetic_data = synthesizer.generate_samples()
+
+        synthetic_data = synthesizer.generate_samples(96000)
+
         metadata = SingleTableMetadata()
         metadata.detect_from_dataframe(original_data) 
+
         quality_report = evaluate_quality(original_data, synthetic_data, metadata)
+        
         score = quality_report.get_score()
         print(f"Trial {trial.number}의 Overall Quality Score: {score}")
         
@@ -156,7 +164,8 @@ def objective(trial):
         print(f"❌ Trial {trial.number} 실패: {e}")
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
-        gc.collect() 
+        gc.collect()
+        
         raise optuna.exceptions.TrialPruned(f"학습 또는 평가 중 오류 발생: {e}")
     finally:
         if 'synthesizer' in locals() and synthesizer is not None:
@@ -168,16 +177,14 @@ def objective(trial):
             torch.cuda.empty_cache()
         gc.collect()
 
-study = optuna.create_study(direction='maximize', study_name='ctabgan_hyperparameter_tuning')
-study.optimize(objective, n_trials=10)
 
-print("\n하이퍼파라미터 튜닝 완료.")
-print(f"최적의 하이퍼파라미터: {study.best_params}")
-print(f"최고 Overall Quality Score: {study.best_value}")
+# Optuna Study 
+study = optuna.create_study(direction='maximize', study_name='ctabgan_hyperparameter_tuning')
+
+study.optimize(objective, n_trials=10) 
 
 best_params = study.best_params
 
-print("\n최적의 하이퍼파라미터로 CTABGAN 모델을 다시 학습합니다...")
 synthesizer_best = CTABGAN(
     raw_csv_path=original_data_path,
     test_ratio=0.00,
@@ -219,15 +226,20 @@ synthesizer_best = CTABGAN(
 ) 
 synthesizer_best.fit()
 
-final_synthetic_data = synthesizer_best.generate_samples()
+target_count = 96000
+collected_data = pd.DataFrame()
+
+while len(collected_data) < target_count:
+    needed = target_count - len(collected_data)
+    new_samples = synthesizer_best.generate_samples(int(needed * 1.1)) 
+    collected_data = pd.concat([collected_data, new_samples], ignore_index=True)
+
+final_synthetic_data = collected_data.iloc[:target_count]
+
 final_synthetic_data_path = os.path.join(data_folder, "travel_survey_generated.csv")
 final_synthetic_data.to_csv(final_synthetic_data_path, index=False, encoding='utf-8-sig')
-print(f"최적의 하이퍼파라미터로 생성된 최종 합성 데이터 저장 완료: {final_synthetic_data_path}")
 
 
-# ============================================================
-# Data Quality Analysis and Visualization
-# ============================================================
 import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy import stats
@@ -240,7 +252,6 @@ import numpy as np
 warnings.filterwarnings('ignore')
 
 def analyze_and_visualize_data_quality(original_data, synthetic_data, save_dir="outputs/optimal_ctabgan+"):
-    """원본 데이터와 합성 데이터의 분포 비교 및 시각화"""
     
     print("📊 데이터 품질 분석 및 시각화 시작!")
     print("=" * 60)
@@ -308,7 +319,6 @@ def analyze_and_visualize_data_quality(original_data, synthetic_data, save_dir="
     min_age = min(original_data['age'].min(), synthetic_data['age'].min())
     max_age = max(original_data['age'].max(), synthetic_data['age'].max())
     bins = np.linspace(min_age, max_age, 20) 
-
     orig_binned_counts, _ = np.histogram(original_data['age'], bins=bins, density=True)
     synth_binned_counts, _ = np.histogram(synthetic_data['age'], bins=bins, density=True)
     
@@ -316,6 +326,7 @@ def analyze_and_visualize_data_quality(original_data, synthetic_data, save_dir="
     x = np.arange(len(bin_labels))
     width = 0.35
 
+    # binned bar chart
     ax = axes[0,0]
     ax.bar(x - width/2, orig_binned_counts, width, label='Original', alpha=0.8, color='blue')
     ax.bar(x + width/2, synth_binned_counts, width, label='Synthetic', alpha=0.8, color='red')
@@ -333,15 +344,17 @@ def analyze_and_visualize_data_quality(original_data, synthetic_data, save_dir="
     axes[0,1].set_ylabel('Age')
     axes[0,1].grid(True, alpha=0.3)
     
+    # Q-Q plot - Original
     stats.probplot(original_data['age'], dist="norm", plot=axes[1,0])
     axes[1,0].set_title('Q-Q Plot - Original')
     axes[1,0].grid(True, alpha=0.3)
     
+    # Q-Q plot - Synthetic
     stats.probplot(synthetic_data['age'], dist="norm", plot=axes[1,1])
     axes[1,1].set_title('Q-Q Plot - Synthetic')
     axes[1,1].grid(True, alpha=0.3)
 
-    fig.delaxes(axes[0,2]) 
+    fig.delaxes(axes[0,2])
     fig.delaxes(axes[1,2])
     
     plt.tight_layout()
@@ -377,7 +390,7 @@ def analyze_and_visualize_data_quality(original_data, synthetic_data, save_dir="
         synth_values = [synth_admin_dist.get(cat, 0) for cat in all_admin_cats]
         
         x = np.arange(len(all_admin_cats))
-        width = 0.35
+        width = 0.35 
 
         ax.bar(x - width/2, orig_values, width, label='Original', alpha=0.8, color='blue')
         ax.bar(x + width/2, synth_values, width, label='Synthetic', alpha=0.8, color='red')
@@ -407,7 +420,7 @@ def analyze_and_visualize_data_quality(original_data, synthetic_data, save_dir="
             axes = axes.reshape(1, -1)
         elif n_rows > 1 and n_cols == 1:
             axes = axes.reshape(-1, 1)
-        elif n_rows == 1 and n_cols == 1: 
+        elif n_rows == 1 and n_cols == 1:
             axes = np.array([[axes]]) 
 
         for idx, col in enumerate(other_categorical_columns):
@@ -439,8 +452,8 @@ def analyze_and_visualize_data_quality(original_data, synthetic_data, save_dir="
         for idx in range(n_other_categorical, n_rows * n_cols):
             row = idx // n_cols
             col_idx = idx % n_cols
-            fig.delaxes(axes[row, col_idx])
-
+            fig.delaxes(axes[row, col_idx]) 
+        
         plt.tight_layout()
         plt.savefig(viz_dir / 'other_categorical_distribution_comparison_5.png', dpi=300, bbox_inches='tight')
         plt.close()
@@ -452,7 +465,7 @@ def analyze_and_visualize_data_quality(original_data, synthetic_data, save_dir="
     def encode_for_correlation(df):
         df_encoded = df.copy()
         le_dict = {}
-        for col in all_categorical_columns:
+        for col in all_categorical_columns: 
             if col in df_encoded.columns:
                 le = LabelEncoder()
                 df_encoded[col] = le.fit_transform(df_encoded[col].astype(str))
@@ -491,7 +504,7 @@ def analyze_and_visualize_data_quality(original_data, synthetic_data, save_dir="
     print(f"🔢 Age 유사성 점수: {age_similarity:.4f}")
 
     categorical_similarities = []
-    for col in all_categorical_columns:
+    for col in all_categorical_columns: 
         if col in original_data.columns and col in synthetic_data.columns:
             orig_dist = original_data[col].value_counts(normalize=True).sort_index()
             synth_dist = synthetic_data[col].value_counts(normalize=True).sort_index()
@@ -502,7 +515,7 @@ def analyze_and_visualize_data_quality(original_data, synthetic_data, save_dir="
             temp_df['orig'] = orig_dist.reindex(all_cats, fill_value=0)
             temp_df['synth'] = synth_dist.reindex(all_cats, fill_value=0)
 
-            similarity = 1 - np.abs(temp_df['orig'] - temp_df['synth']).mean()
+            similarity = 1 - np.abs(temp_df['orig'] - temp_df['synth']).mean() 
         else:
             similarity = 0.0 
             print(f"경고: 유사성 계산 중 '{col}' 컬럼이 데이터프레임에 없습니다.")
@@ -514,55 +527,12 @@ def analyze_and_visualize_data_quality(original_data, synthetic_data, save_dir="
     overall_similarity = np.mean(list(similarity_scores.values()))
     print(f"\n🎯 전체 평균 유사성 점수: {overall_similarity:.4f}")
     
-    summary_report = f"""
-데이터 품질 분석 보고서
-========================
 
-📊 데이터 크기:
-- 원본 데이터: {len(original_data):,} rows
-- 합성 데이터: {len(synthetic_data):,} rows
-
-📈 유사성 점수:
-- Age: {similarity_scores['age']:.4f}
-- 범주형 변수 평균: {np.mean(categorical_similarities):.4f}
-- 전체 평균: {overall_similarity:.4f}
-
-📋 범주형 변수별 점수:
-"""
-    
-    for col in all_categorical_columns: 
-        if col in similarity_scores:
-            summary_report += f"- {col}: {similarity_scores[col]:.4f}\n"
-        else:
-            summary_report += f"- {col}: 점수 없음 (컬럼 누락)\n"
-    
-    summary_report += f"""
-🎨 생성된 시각화:
-- age_distribution_comparison_5.png
-- home_administrative_distribution_대전광역시.png
-- home_administrative_distribution_세종특별자치시.png
-
-- other_categorical_distribution_comparison_5.png
-- correlation_comparison_5.png
-
-📁 저장 위치: {viz_dir}
-"""
-    
-    with open(viz_dir / 'quality_analysis_report.txt', 'w', encoding='utf-8') as f:
-        f.write(summary_report)
-    
-    print("\n" + "=" * 60)
-    print("✅ 데이터 품질 분석 및 시각화 완료!")
-    print(f"📁 결과 저장 위치: {viz_dir}")
-    print(f"📊 전체 유사성 점수: {overall_similarity:.4f}")
-    print("=" * 60)
-    
     return similarity_scores, stats_comparison
 
 def run_complete_analysis():
     
-    print("📂 데이터 로딩...")
-    original_data = pd.read_csv(r"C:\Users\ADMIN\SEM\DUT\travel survey 기반 가상인구\travel_survey_preprocessed_sejong+daejeon.csv")
+    original_data = pd.read_csv(r"C:\Users\ADMIN\SEM\DUT\travel survey 기반 가상인구\travel_survey_preprocessed_sejong+daejeon_filled.csv")
     synthetic_data = pd.read_csv(r"C:\Users\ADMIN\SEM\DUT\travel survey 기반 가상인구\travel_survey_generated.csv")
     
     similarity_scores, stats_comparison = analyze_and_visualize_data_quality(
@@ -574,6 +544,7 @@ def run_complete_analysis():
 
 if __name__ == "__main__":
     similarity_scores, stats_comparison = run_complete_analysis()
+
 
 from sklearn.preprocessing import MinMaxScaler
 from dython import nominal
@@ -604,7 +575,7 @@ def stat_sim(real_path, fake_path, cat_cols=None):
     corr_dist = np.linalg.norm(real_matrix - fake_matrix)
 
     cat_stat = [] 
-    num_stat = []
+    num_stat = [] 
 
     for column in real.columns:
         if column in categorical_columns: 
@@ -616,11 +587,12 @@ def stat_sim(real_path, fake_path, cat_cols=None):
             cat_stat.append(distance.jensenshannon(real_pdf_values, fake_pdf_values, 2.0))
         else: 
             scaler = MinMaxScaler()
+
             real_col_data = real[column].dropna().values.reshape(-1, 1)
             fake_col_data = fake[column].dropna().values.reshape(-1, 1)
 
             if len(real_col_data) > 0 and len(fake_col_data) > 0: 
-                scaler.fit(real_col_data)
+                scaler.fit(real_col_data) 
                 l1 = scaler.transform(real_col_data).flatten()
                 l2 = scaler.transform(fake_col_data).flatten()
                 num_stat.append(wasserstein_distance(l1, l2))
@@ -634,7 +606,7 @@ def stat_sim(real_path, fake_path, cat_cols=None):
     return [avg_wd, avg_jsd, corr_dist]
 
 
-real_path = r"C:\Users\ADMIN\SEM\DUT\travel survey 기반 가상인구\travel_survey_preprocessed_세종+대전.csv"
+real_path = r"C:\Users\ADMIN\SEM\DUT\travel survey 기반 가상인구\travel_survey_preprocessed_sejong+daejeon_filled.csv"
 fake_path = r"C:\Users\ADMIN\SEM\DUT\travel survey 기반 가상인구\travel_survey_generated.csv"
 
 cat_cols = [['home_province', 'home_administrative', 'sex', 'housetype', 'driver_license', 'drive_regularly', 'commute_to_fixed_workplace',
@@ -649,5 +621,3 @@ result = pd.DataFrame(
     ],
     index=["Result"]
 )
-
-display(result)
