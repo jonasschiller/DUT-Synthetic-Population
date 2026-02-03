@@ -106,72 +106,72 @@ class DataPrep(object):
         
     def inverse_prep(self, data, eps=1):
         
-        # 1. DataFrame 생성:
-        #    - 입력받은 data(Numpy 배열 형태)와 self.df.columns(원본 데이터의 컬럼명)를
-        #      이용하여 Pandas DataFrame을 생성합니다.
+        # 1. Create DataFrame:
+        #    - Create a Pandas DataFrame using the input data (Numpy array format) 
+        #      and self.df.columns (original data column names).
         df_sample = pd.DataFrame(data, columns=self.df.columns)
 
-        # 2. 라벨 인코더 역변환 (범주형 데이터 복원):
-        #    - self.label_encoder_list (학습 시 저장된 라벨 인코더 정보)를 순회합니다.
+        # 2. Inverse Label Encoding (Restore Categorical Data):
+        #    - Iterate through self.label_encoder_list (label encoder info saved during training).
         for i in range(len(self.label_encoder_list)):
-            le = self.label_encoder_list[i]["label_encoder"] # 저장된 라벨 인코더 가져오기
-            col_name = self.label_encoder_list[i]["column"]  # 해당 컬럼 이름 가져오기
+            le = self.label_encoder_list[i]["label_encoder"] # Get saved label encoder
+            col_name = self.label_encoder_list[i]["column"]  # Get corresponding column name
             
-            # - 해당 컬럼을 정수형으로 변환합니다. 
-            #   (***만약 이 시점에 NaN/inf가 있으면 여기서 오류 발생***)
+            # - Convert the column to integer type.
+            #   (***If there are NaNs/infs at this point, an error will occur here***)
             df_sample[col_name] = df_sample[col_name].astype(int) 
             
-            # - 라벨 인코더의 inverse_transform 메서드를 사용하여 
-            #   숫자 형태의 범주형 데이터를 원래의 문자열/객체 형태로 복원합니다.
+            # - Restore the numeric categorical data to its original string/object format 
+            #   using the label encoder's inverse_transform method.
             df_sample[col_name] = le.inverse_transform(df_sample[col_name])
 
-        # 3. 로그 변환 역변환:
-        #    - self.log_columns (로그 변환을 적용했던 컬럼 목록)에 있는 컬럼들을 처리합니다.
+        # 3. Inverse Log Transformation:
+        #    - Process columns in self.log_columns (list of columns where log transformation was applied).
         if self.log_columns:
-            for i in df_sample: # DataFrame의 모든 컬럼을 순회
-                if i in self.log_columns: # 현재 컬럼이 로그 변환된 컬럼이라면
-                    lower_bound = self.lower_bounds[i] # 저장된 최소값(로그 변환 시 사용) 가져오기
+            for i in df_sample: # Iterate through all columns in the DataFrame
+                if i in self.log_columns: # If the current column is a log-transformed column
+                    lower_bound = self.lower_bounds[i] # Get the saved minimum value (used during log transformation)
                     
-                    # - 로그의 역함수인 지수(exp) 함수를 사용하여 값을 복원합니다.
-                    # - lower_bound 값에 따라 약간의 조정(eps)을 가합니다.
-                    #   (***주의: .apply()는 결과를 반환하므로, df_sample[i] = ... 로 할당해야 반영됩니다.***)
-                    #   (***원본 코드에서는 할당이 누락된 부분이 있습니다.***)
+                    # - Restore values using the exponential (exp) function, the inverse of log.
+                    # - Apply slight adjustment (eps) based on the lower_bound value.
+                    #   (***Note: .apply() returns the result, so it must be assigned like df_sample[i] = ... to be reflected.***)
+                    #   (***In the original code, assignment was missing in some parts.***)
                     if lower_bound > 0:
-                        df_sample[i].apply(lambda x: np.exp(x)) # <-- 할당 누락!
+                        df_sample[i].apply(lambda x: np.exp(x)) # <-- Assignment missing!
                     elif lower_bound == 0:
                         df_sample[i] = df_sample[i].apply(lambda x: np.ceil(np.exp(x)-eps) if (np.exp(x)-eps) < 0 else (np.exp(x)-eps))
                     else: 
                         df_sample[i] = df_sample[i].apply(lambda x: np.exp(x)-eps+lower_bound)
 
-        # 4. 정수형 컬럼 처리:
-        #    - self.integer_columns (정수형으로 지정된 컬럼 목록)을 순회합니다.
+        # 4. Integer Column Processing:
+        #    - Iterate through self.integer_columns (list of columns designated as integer).
         if self.integer_columns:
             for column in self.integer_columns:
-                # 'age' 컬럼이라면 중앙값을 사용하도록 분기 (또는 모든 정수형에 중앙값 적용)
-                if column == 'age': # 또는 그냥 모든 정수형에 적용해도 됨
-                    # --- 수정 시작 ---
+                # Branch to use median for 'age' column (or apply to all integer types)
+                if column == 'age': # or could just apply to all integer types
+                    # --- Modification start ---
                     df_sample[column] = df_sample[column].replace([np.inf, -np.inf], np.nan)
                     
-                    # 원본 데이터의 중앙값 계산
+                    # Calculate median of original data
                     median_val = self.df[column].median() 
                     
-                    # NaN 값을 중앙값으로 채우기
+                    # Fill NaN values with median
                     df_sample[column] = df_sample[column].fillna(median_val)
-                    # --- 수정 끝 ---
-                else: # 'age'가 아닌 다른 정수형 컬럼 (기존 방식 또는 다른 방식 적용)
+                    # --- Modification end ---
+                else: # Other integer columns not 'age' (apply existing or different method)
                     df_sample[column] = df_sample[column].replace([np.inf, -np.inf], np.nan)
                     mean_val = self.df[column].mean() 
                     df_sample[column] = df_sample[column].fillna(mean_val)
 
-                # 반올림 및 정수 변환 (공통)
+                # Round and convert to integer (Common)
                 df_sample[column] = (np.round(df_sample[column].values))
                 df_sample[column] = df_sample[column].astype(int)
 
-        # 5. 특수 값(-9999999, 'empty')을 NaN으로 변환:
-        #    - 모델이나 데이터 처리 과정에서 사용된 특정 값들을 표준 결측치(NaN)로 바꿉니다.
-        #    - 이 코드는 astype(int) 이후에 실행되므로, astype(int) 오류를 막지는 못합니다.
+        # 5. Convert special values (-9999999, 'empty') to NaN:
+        #    - Change specific values used in model or data processing to standard missing values (NaN).
+        #    - Since this code runs after astype(int), it does not prevent astype(int) errors.
         df_sample.replace(-9999999, np.nan, inplace=True)
         df_sample.replace('empty', np.nan, inplace=True)
 
-        # 6. 최종 DataFrame 반환:
+        # 6. Return Final DataFrame:
         return df_sample

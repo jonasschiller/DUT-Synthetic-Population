@@ -112,6 +112,10 @@ class CTABGAN():
         )
         if self.verbose:
             print("Data preparation complete. Starting synthesizer fitting...")
+        
+        print(f"DEBUG: DataPrep df shape: {self.data_prep.df.shape}")
+        print(f"DEBUG: DataPrep columns: {self.data_prep.df.columns.tolist()}")
+
 
         self.synthesizer.fit(
             train_data_df=self.data_prep.df, 

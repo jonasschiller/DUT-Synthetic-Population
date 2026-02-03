@@ -292,13 +292,12 @@ class Cond(object):
                 counter += 1
                 self.model.append(np.argmax(data[:, st:ed], axis=-1))
                 st = ed
-
         self.interval = [] 
         self.n_col = 0 
         self.n_opt = 0 
         self.p = np.zeros((counter, maximum_interval(output_info)))
         self.p_sampling = []
-
+        st = 0
         for item in output_info:
             if item[1] == 'tanh':
                 st += item[0]
@@ -306,7 +305,6 @@ class Cond(object):
             elif item[1] == 'softmax':
                 ed = st + item[0]
                 tmp = np.sum(data[:, st:ed], axis=0) 
-
                 log_freq = np.log(tmp + 1)
                 log_freq_normalized = log_freq / np.sum(log_freq)
 
@@ -454,7 +452,7 @@ def determine_layers_disc(side, num_channels,
                           leaky_relu_slope=0.2, 
                           max_conv_blocks=3): 
     if not (4 <= side <= 64):
-        raise ValueError(f"지원하는 side 값은 4에서 64 사이여야 합니다. 입력된 값: {side}")
+        raise ValueError(f"Supported side value must be between 4 and 64. Input value: {side}")
 
     layer_dims = [(1, side)] 
 
@@ -492,7 +490,7 @@ def determine_layers_gen(side, random_dim, num_channels,
                           gen_leaky_relu_slope=0.2): 
 
     if not (4 <= side <= 64):
-        raise ValueError(f"지원하는 side 값은 4에서 64 사이여야 합니다. 입력된 값: {side}")
+        raise ValueError(f"Supported side value must be between 4 and 64. Input value: {side}")
 
     layer_dims = []
     layer_dims.append((1, side)) 
@@ -658,8 +656,8 @@ class CTABGANSynthesizer:
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
         if self.verbose:
-            print(f"\nPyTorch 장치 확인: {self.device}를 사용하여 학습을 진행합니다.")
-            if not torch.cuda.is_available(): print("경고: CUDA 사용 불가. CPU로 학습합니다.")
+            print(f"\nPyTorch Device Check: Training with {self.device}.")
+            if not torch.cuda.is_available(): print("Warning: CUDA is not available. Training on CPU.")
 
         self.G_losses, self.D_losses, self.C_losses = [], [], []
 
@@ -672,7 +670,7 @@ class CTABGANSynthesizer:
             if problem_type:
                 try: target_index = train_data_df.columns.get_loc(type_dict[problem_type])
                 except KeyError:
-                    if self.verbose: print(f"경고: 타겟 컬럼 '{type_dict[problem_type]}' 찾을 수 없음.")
+                    if self.verbose: print(f"Warning: Target column '{type_dict[problem_type]}' not found.")
                     target_index = None
 
         self.transformer = DataTransformer(train_data=train_data_df.copy(),
@@ -681,8 +679,25 @@ class CTABGANSynthesizer:
         self.transformer.fit()
         transformed_train_data = self.transformer.transform(train_data_df.values)
 
+        # Sanitize output_info to match actual data dimensions
+        data_dim = transformed_train_data.shape[1]
+        expected_dim = 0
+        new_output_info = []
+        for item in self.transformer.output_info:
+            if expected_dim + item[0] <= data_dim:
+                expected_dim += item[0]
+                new_output_info.append(item)
+            else:
+                print(f"Warning: Truncating output_info. Expected more columns than available ({data_dim}). Dropping item {item}.")
+                break
+        
+        self.transformer.output_info = new_output_info
+        self.transformer.output_dim = expected_dim
+        
+
         data_sampler = Sampler(transformed_train_data, self.transformer.output_info)
         data_dim = self.transformer.output_dim
+        
         self.cond_generator = Cond(transformed_train_data, self.transformer.output_info)
 
         sides = [4, 8, 16, 24, 32, 64] 
