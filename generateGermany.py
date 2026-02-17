@@ -1,3 +1,4 @@
+from networkx import display
 import pandas as pd
 import numpy as np
 import os
@@ -36,7 +37,7 @@ except ImportError:
     print(f"Please check if '{ctab_gan_plus_path}' path and 'model/ctabgan.py' file are correct.")
     sys.exit(1)
 
-original_data_path = r"./german_travel_survey/personen_synth_germany.csv"
+original_data_path = r"./german_travel_survey/personen_germany.csv"
 original_data = pd.read_csv(original_data_path, encoding='utf-8', engine='python')
 output_base_path = r"./german_travel_survey/personen_synth_germany.csv"
 
@@ -255,7 +256,7 @@ def analyze_and_visualize_data_quality(original_data, synthetic_data, save_dir="
     print(age_df.round(2))
     stats_comparison['age'] = age_df
 
-    all_categorical_columns = ['home_province', 'home_administrative', 'sex', 'housetype', 'driver_license', 'drive_regularly', 'commute_to_fixed_workplace', 'occupation', 
+    all_categorical_columns = ['sex', 'housetype', 'driver_license', 'drive_regularly', 'commute_to_fixed_workplace', 'occupation', 
                                'home_office_days', 'car_group', 'bicycle_group', 'other_group', 'mode_choice']
     
     print("\n📊 Categorical Variable Distribution Comparison:")
@@ -334,47 +335,7 @@ def analyze_and_visualize_data_quality(original_data, synthetic_data, save_dir="
     plt.close()
 
 
-    for df_name, df in {'original_data': original_data, 'synthetic_data': synthetic_data}.items():
-        if 'home_province' not in df.columns or 'home_administrative' not in df.columns:
-            print(f"Warning: '{df_name}' missing 'home_province' or 'home_administrative' column. Skipping this visualization.")
-            continue 
-
-    for province in provinces_to_plot:
-        fig, ax = plt.subplots(1, 1, figsize=(12, 7)) 
-        
-        orig_province_data = original_data[original_data['home_province'] == province]
-        synth_province_data = synthetic_data[synthetic_data['home_province'] == province]
-
-        if province == '세종특별자치시':
-            all_admin_cats = sorted([d for d in sejong_admin_districts if d in set(orig_province_data['home_administrative']) or d in set(synth_province_data['home_administrative'])])
-            orig_admin_dist = orig_province_data[orig_province_data['home_administrative'].isin(sejong_admin_districts)]['home_administrative'].value_counts(normalize=True).sort_index()
-            synth_admin_dist = synth_province_data[synth_province_data['home_administrative'].isin(sejong_admin_districts)]['home_administrative'].value_counts(normalize=True).sort_index()
-        else:
-            orig_admin_dist = orig_province_data['home_administrative'].value_counts(normalize=True).sort_index()
-            synth_admin_dist = synth_province_data['home_administrative'].value_counts(normalize=True).sort_index()
-            all_admin_cats = sorted(set(orig_admin_dist.index) | set(synth_admin_dist.index))
-            
-
-        orig_values = [orig_admin_dist.get(cat, 0) for cat in all_admin_cats]
-        synth_values = [synth_admin_dist.get(cat, 0) for cat in all_admin_cats]
-        
-        x = np.arange(len(all_admin_cats))
-        width = 0.35
-
-        ax.bar(x - width/2, orig_values, width, label='Original', alpha=0.8, color='blue')
-        ax.bar(x + width/2, synth_values, width, label='Synthetic', alpha=0.8, color='red')
-        
-        ax.set_title(f'{province} Home Administrative Distribution Comparison')
-        ax.set_xlabel('Home Administrative')
-        ax.set_ylabel('Proportion')
-        ax.set_xticks(x)
-        ax.set_xticklabels(all_admin_cats, rotation=45, ha='right', fontsize=4) 
-        ax.legend()
-        ax.grid(True, alpha=0.3)
-
-        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-        plt.savefig(viz_dir / f'home_administrative_distribution_{province.replace(" ", "_")}.png', dpi=300, bbox_inches='tight')
-        plt.close()
+   
 
     other_categorical_columns = [col for col in all_categorical_columns if col not in ['home_province', 'home_administrative']]
     
@@ -544,8 +505,9 @@ Data Quality Analysis Report
 def run_complete_analysis():
     
     print("📂 Loading Data...")
-    original_data = pd.read_csv(r"C:\Users\ADMIN\SEM\DUT\travel survey 기반 가상인구\travel_survey_preprocessed_sejong+daejeon.csv")
-    synthetic_data = pd.read_csv(r"C:\Users\ADMIN\SEM\DUT\travel survey 기반 가상인구\travel_survey_generated.csv")
+    
+    original_data = pd.read_csv(r"./german_travel_survey/personen_germany.csv")
+    synthetic_data = pd.read_csv(r"./german_travel_survey/personen_synth_germany.csv")
     
     similarity_scores, stats_comparison = analyze_and_visualize_data_quality(
         original_data, 
@@ -616,10 +578,10 @@ def stat_sim(real_path, fake_path, cat_cols=None):
     return [avg_wd, avg_jsd, corr_dist]
 
 
-real_path = r"C:\Users\ADMIN\SEM\DUT\travel survey 기반 가상인구\travel_survey_preprocessed_세종+대전.csv"
-fake_path = r"C:\Users\ADMIN\SEM\DUT\travel survey 기반 가상인구\travel_survey_generated.csv"
+real_path = r"./german_travel_survey/personen_germany.csv"
+fake_path = r"./german_travel_survey/personen_synth_germany.csv"
 
-cat_cols = [['home_province', 'home_administrative', 'sex', 'housetype', 'driver_license', 'drive_regularly', 'commute_to_fixed_workplace',
+cat_cols = [['sex', 'housetype', 'driver_license', 'drive_regularly', 'commute_to_fixed_workplace',
              'occupation', 'home_office_days', 'car_group', 'bicycle_group', 'other_group', 'mode_choice']]
 
 avg_wd, avg_jsd, diff_corr = stat_sim(real_path, fake_path, cat_cols=cat_cols)
@@ -632,4 +594,4 @@ result = pd.DataFrame(
     index=["Result"]
 )
 
-display(result)
+print(result)
