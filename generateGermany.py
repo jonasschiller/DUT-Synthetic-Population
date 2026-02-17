@@ -333,9 +333,6 @@ def analyze_and_visualize_data_quality(original_data, synthetic_data, save_dir="
     plt.savefig(viz_dir / 'age_distribution_comparison_5.png', dpi=300, bbox_inches='tight')
     plt.close()
 
-    provinces_to_plot = ['대전광역시', '세종특별자치시']
-    
-    sejong_admin_districts = ['다정동', '소담동', '새롬동', '보람동', '종촌동', '아름동', '도담동', '조치원읍', '고운동', '부강면', '대평동', '한솔동', '소정면', '금남면', '장군면', '전의면', '전동면', '연서면', '연동면', '해밀동', '반곡동', '연기면']
 
     for df_name, df in {'original_data': original_data, 'synthetic_data': synthetic_data}.items():
         if 'home_province' not in df.columns or 'home_administrative' not in df.columns:

@@ -36,9 +36,9 @@ except ImportError:
     print(f"Please check if '{ctab_gan_plus_path}' path and 'model/ctabgan.py' file are correct.")
     sys.exit(1)
 
-original_data_path = r"./travel_survey_preprocessed_sejong+daejeon.csv"
+original_data_path = r"./Data/travel_survey_preprocessed_sejong+daejeon.csv"
 original_data = pd.read_csv(original_data_path, encoding='utf-8-sig', engine='python')
-output_base_path = r"./travel_survey_generated_sejong+daejeon.csv"
+output_base_path = r"./Data/travel_survey_generated_sejong+daejeon.csv"
 
 # Add two zero columns to original_data
 original_data['zero1'] = 0
@@ -228,6 +228,11 @@ final_synthetic_data = synthesizer_best.generate_samples()
 final_synthetic_data_path = os.path.join(data_folder, "travel_survey_generated.csv")
 final_synthetic_data.to_csv(final_synthetic_data_path, index=False, encoding='utf-8-sig')
 print(f"Final synthetic data generated with best hyperparameters saved to: {final_synthetic_data_path}")
+
+# Save the trained model
+model_save_path = os.path.join(data_folder, "ctabgan_model.pth")
+synthesizer_best.save(model_save_path)
+print(f"Trained CTABGAN model saved to: {model_save_path}")
 
 
 # ============================================================

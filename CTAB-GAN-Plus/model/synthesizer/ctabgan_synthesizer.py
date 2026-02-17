@@ -661,6 +661,75 @@ class CTABGANSynthesizer:
 
         self.G_losses, self.D_losses, self.C_losses = [], [], []
 
+    def save_state(self):
+        """Save the state of the synthesizer."""
+        if self.verbose:
+            print("Saving synthesizer state...")
+            
+        return {
+            'class_dim': self.class_dim,
+            'random_dim': self.random_dim,
+            'num_channels': self.num_channels,
+            'dside': self.dside,
+            'gside': self.gside,
+            'generator_state_dict': self.generator.state_dict(),
+            'transformer': self.transformer,
+            'cond_generator': self.cond_generator,
+            'Gtransformer': self.Gtransformer,
+            'Dtransformer': self.Dtransformer,
+            
+            # Save init params for reconstruction (though parent manages this usually)
+            'batch_size': self.batch_size,
+            'epochs': self.epochs,
+            'lr_g': self.lr_g, 'lr_d': self.lr_d, 'lr_c': self.lr_c,
+            'beta1_g': self.beta1_g, 'beta2_g': self.beta2_g,
+            'beta1_d': self.beta1_d, 'beta2_d': self.beta2_d,
+            'beta1_c': self.beta1_c, 'beta2_c': self.beta2_c,
+            'eps_common': self.eps_common, 'l2scale_common': self.l2scale_common,
+            'lambda_gp': self.lambda_gp,
+            'gumbel_tau': self.gumbel_tau,
+            'leaky_relu_slope': self.leaky_relu_slope,
+            'gen_leaky_relu_slope': self.gen_leaky_relu_slope,
+            'disc_max_conv_blocks': self.disc_max_conv_blocks,
+            'gen_max_conv_blocks': self.gen_max_conv_blocks,
+            'lambda_cond_loss': self.lambda_cond_loss,
+            'lambda_info_loss': self.lambda_info_loss,
+            'lambda_aux_classifier_loss': self.lambda_aux_classifier_loss,
+            'ci_discriminator_steps': self.ci_discriminator_steps,
+            'classifier_dropout_rate': self.classifier_dropout_rate,
+            'leaky_relu_slope_classifier': self.leaky_relu_slope_classifier
+        }
+
+    def load_state(self, state_dict):
+        """Load the state of the synthesizer."""
+        if self.verbose:
+            print("Loading synthesizer state...")
+            
+        self.class_dim = state_dict['class_dim']
+        self.random_dim = state_dict['random_dim']
+        self.num_channels = state_dict['num_channels']
+        self.dside = state_dict['dside']
+        self.gside = state_dict['gside']
+        
+        self.transformer = state_dict['transformer']
+        self.cond_generator = state_dict['cond_generator']
+        self.Gtransformer = state_dict['Gtransformer']
+        self.Dtransformer = state_dict['Dtransformer']
+
+        # Re-construct Generator
+        layers_G = determine_layers_gen(
+            self.gside,
+            self.random_dim + self.cond_generator.n_opt, 
+            self.num_channels,
+            self.gen_max_conv_blocks,
+            gen_leaky_relu_slope=self.gen_leaky_relu_slope
+        )
+        self.generator = Generator(self.gside, layers_G).to(self.device)
+        self.generator.load_state_dict(state_dict['generator_state_dict'])
+        
+        if self.verbose:
+            print("Synthesizer state loaded successfully.")
+
     def fit(self, train_data_df=pd.DataFrame(), categorical_columns=[], mixed_columns={},
             general_columns=[], non_categorical_columns=[], type_dict={}, trial=None):
         

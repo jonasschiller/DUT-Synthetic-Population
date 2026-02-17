@@ -55,6 +55,8 @@ class CTABGAN():
 
         self.__name__ = 'CTABGAN'
             
+
+        self.raw_csv_path = raw_csv_path
         self.raw_df = pd.read_csv(raw_csv_path)
         self.test_ratio = test_ratio
         self.categorical_columns = categorical_columns
@@ -136,6 +138,237 @@ class CTABGAN():
         else: 
             print(f'Finished training for {trial_num_info}in {duration:.2f} seconds.')
 
+
+    
+    def save(self, path):
+        """Save the CTABGAN model."""
+        import torch
+        
+        state = {
+            # CTABGAN init arguments
+            'raw_csv_path': self.raw_csv_path,
+            'test_ratio': self.test_ratio,
+            'categorical_columns': self.categorical_columns,
+            'log_columns': self.log_columns,
+            'mixed_columns': self.mixed_columns,
+            'general_columns': self.general_columns,
+            'non_categorical_columns': self.non_categorical_columns,
+            'integer_columns': self.integer_columns,
+            'problem_type': self.problem_type,
+            'condition_column': self.condition_column,
+            
+            'class_dim': self.synthesizer.class_dim,
+            'random_dim': self.synthesizer.random_dim,
+            'num_channels': self.synthesizer.num_channels,
+            'classifier_dropout_rate': self.synthesizer.classifier_dropout_rate,
+            'leaky_relu_slope_classifier': self.synthesizer.leaky_relu_slope_classifier,
+            
+            'batch_size': self.synthesizer.batch_size,
+            'epochs': self.synthesizer.epochs,
+            
+            'lr_g': self.synthesizer.lr_g, 'lr_d': self.synthesizer.lr_d, 'lr_c': self.synthesizer.lr_c,
+            'beta1_g': self.synthesizer.beta1_g, 'beta2_g': self.synthesizer.beta2_g,
+            'beta1_d': self.synthesizer.beta1_d, 'beta2_d': self.synthesizer.beta2_d,
+            'beta1_c': self.synthesizer.beta1_c, 'beta2_c': self.synthesizer.beta2_c,
+            'eps_common': self.synthesizer.eps_common, 'l2scale_common': self.synthesizer.l2scale_common,
+            
+            'lambda_gp': self.synthesizer.lambda_gp,
+            
+            'gumbel_tau': self.synthesizer.gumbel_tau,
+            'leaky_relu_slope': self.synthesizer.leaky_relu_slope,
+            'gen_leaky_relu_slope': self.synthesizer.gen_leaky_relu_slope,
+            'disc_max_conv_blocks': self.synthesizer.disc_max_conv_blocks,
+            'gen_max_conv_blocks': self.synthesizer.gen_max_conv_blocks,
+            
+            'lambda_cond_loss': self.synthesizer.lambda_cond_loss,
+            'lambda_info_loss': self.synthesizer.lambda_info_loss,
+            'lambda_aux_classifier_loss': self.synthesizer.lambda_aux_classifier_loss,
+            
+            'ci_discriminator_steps': self.synthesizer.ci_discriminator_steps,
+            'verbose': self.verbose,
+            
+            # Synthesizer State
+            'synthesizer_state': self.synthesizer.save_state()
+        }
+        torch.save(state, path)
+        if self.verbose:
+            print(f"Model saved to {path}")
+
+    @classmethod
+    def load(cls, path):
+        """Load a saved CTABGAN model."""
+        import torch
+        state = torch.load(path)
+        
+        # Determine params for __init__
+        # We extract keys that match __init__ args
+        init_params = {
+            'raw_csv_path': state.get('raw_csv_path'),
+            'test_ratio': state.get('test_ratio'),
+            'categorical_columns': state.get('categorical_columns'),
+            'log_columns': state.get('log_columns'),
+            'mixed_columns': state.get('mixed_columns'),
+            'general_columns': state.get('general_columns'),
+            'non_categorical_columns': state.get('non_categorical_columns'),
+            'integer_columns': state.get('integer_columns'),
+            'problem_type': state.get('problem_type'),
+            'condition_column': state.get('condition_column'),
+            
+            'class_dim': state.get('class_dim'),
+            'random_dim': state.get('random_dim'),
+            'num_channels': state.get('num_channels'),
+            'classifier_dropout_rate': state.get('classifier_dropout_rate'),
+            'leaky_relu_slope_classifier': state.get('leaky_relu_slope_classifier'),
+            
+            'batch_size': state.get('batch_size'),
+            'epochs': state.get('epochs'),
+            
+            'lr_g': state.get('lr_g'), 'lr_d': state.get('lr_d'), 'lr_c': state.get('lr_c'),
+            'beta1_g': state.get('beta1_g'), 'beta2_g': state.get('beta2_g'),
+            'beta1_d': state.get('beta1_d'), 'beta2_d': state.get('beta2_d'),
+            'beta1_c': state.get('beta1_c'), 'beta2_c': state.get('beta2_c'),
+            'eps_common': state.get('eps_common'), 'l2scale_common': state.get('l2scale_common'),
+            
+            'lambda_gp': state.get('lambda_gp'),
+            
+            'gumbel_tau': state.get('gumbel_tau'),
+            'leaky_relu_slope': state.get('leaky_relu_slope'),
+            'gen_leaky_relu_slope': state.get('gen_leaky_relu_slope'),
+            'disc_max_conv_blocks': state.get('disc_max_conv_blocks'),
+            'gen_max_conv_blocks': state.get('gen_max_conv_blocks'),
+            
+            'lambda_cond_loss': state.get('lambda_cond_loss'),
+            'lambda_info_loss': state.get('lambda_info_loss'),
+            'lambda_aux_classifier_loss': state.get('lambda_aux_classifier_loss'),
+            
+            'ci_discriminator_steps': state.get('ci_discriminator_steps'),
+            'verbose': state.get('verbose', False)
+        }
+        
+        # Initialize new instance
+        model = cls(**init_params)
+        
+        # Load internal state
+        model.synthesizer.load_state(state['synthesizer_state'])
+        
+        return model
+
+
+    def save(self, path):
+        """Save the CTABGAN model."""
+        import torch
+        
+        state = {
+            # CTABGAN init arguments
+            'raw_csv_path': self.raw_csv_path,
+            'test_ratio': self.test_ratio,
+            'categorical_columns': self.categorical_columns,
+            'log_columns': self.log_columns,
+            'mixed_columns': self.mixed_columns,
+            'general_columns': self.general_columns,
+            'non_categorical_columns': self.non_categorical_columns,
+            'integer_columns': self.integer_columns,
+            'problem_type': self.problem_type,
+            'condition_column': self.condition_column,
+            
+            'class_dim': self.synthesizer.class_dim,
+            'random_dim': self.synthesizer.random_dim,
+            'num_channels': self.synthesizer.num_channels,
+            'classifier_dropout_rate': self.synthesizer.classifier_dropout_rate,
+            'leaky_relu_slope_classifier': self.synthesizer.leaky_relu_slope_classifier,
+            
+            'batch_size': self.synthesizer.batch_size,
+            'epochs': self.synthesizer.epochs,
+            
+            'lr_g': self.synthesizer.lr_g, 'lr_d': self.synthesizer.lr_d, 'lr_c': self.synthesizer.lr_c,
+            'beta1_g': self.synthesizer.beta1_g, 'beta2_g': self.synthesizer.beta2_g,
+            'beta1_d': self.synthesizer.beta1_d, 'beta2_d': self.synthesizer.beta2_d,
+            'beta1_c': self.synthesizer.beta1_c, 'beta2_c': self.synthesizer.beta2_c,
+            'eps_common': self.synthesizer.eps_common, 'l2scale_common': self.synthesizer.l2scale_common,
+            
+            'lambda_gp': self.synthesizer.lambda_gp,
+            
+            'gumbel_tau': self.synthesizer.gumbel_tau,
+            'leaky_relu_slope': self.synthesizer.leaky_relu_slope,
+            'gen_leaky_relu_slope': self.synthesizer.gen_leaky_relu_slope,
+            'disc_max_conv_blocks': self.synthesizer.disc_max_conv_blocks,
+            'gen_max_conv_blocks': self.synthesizer.gen_max_conv_blocks,
+            
+            'lambda_cond_loss': self.synthesizer.lambda_cond_loss,
+            'lambda_info_loss': self.synthesizer.lambda_info_loss,
+            'lambda_aux_classifier_loss': self.synthesizer.lambda_aux_classifier_loss,
+            
+            'ci_discriminator_steps': self.synthesizer.ci_discriminator_steps,
+            'verbose': self.verbose,
+            
+            # Synthesizer State
+            'synthesizer_state': self.synthesizer.save_state(),
+            
+            # Data Prep State
+            'data_prep': self.data_prep
+        }
+        torch.save(state, path)
+        if self.verbose:
+            print(f"Model saved to {path}")
+
+    @classmethod
+    def load(cls, path):
+        """Load a saved CTABGAN model."""
+        import torch
+        state = torch.load(path, weights_only=False)
+        
+        # Determine params for __init__
+        init_params = {
+            'raw_csv_path': state.get('raw_csv_path'),
+            'test_ratio': state.get('test_ratio'),
+            'categorical_columns': state.get('categorical_columns'),
+            'log_columns': state.get('log_columns'),
+            'mixed_columns': state.get('mixed_columns'),
+            'general_columns': state.get('general_columns'),
+            'non_categorical_columns': state.get('non_categorical_columns'),
+            'integer_columns': state.get('integer_columns'),
+            'problem_type': state.get('problem_type'),
+            'condition_column': state.get('condition_column'),
+            
+            'class_dim': state.get('class_dim'),
+            'random_dim': state.get('random_dim'),
+            'num_channels': state.get('num_channels'),
+            'classifier_dropout_rate': state.get('classifier_dropout_rate'),
+            'leaky_relu_slope_classifier': state.get('leaky_relu_slope_classifier'),
+            
+            'batch_size': state.get('batch_size'),
+            'epochs': state.get('epochs'),
+            
+            'lr_g': state.get('lr_g'), 'lr_d': state.get('lr_d'), 'lr_c': state.get('lr_c'),
+            'beta1_g': state.get('beta1_g'), 'beta2_g': state.get('beta2_g'),
+            'beta1_d': state.get('beta1_d'), 'beta2_d': state.get('beta2_d'),
+            'beta1_c': state.get('beta1_c'), 'beta2_c': state.get('beta2_c'),
+            'eps_common': state.get('eps_common'), 'l2scale_common': state.get('l2scale_common'),
+            
+            'lambda_gp': state.get('lambda_gp'),
+            
+            'gumbel_tau': state.get('gumbel_tau'),
+            'leaky_relu_slope': state.get('leaky_relu_slope'),
+            'gen_leaky_relu_slope': state.get('gen_leaky_relu_slope'),
+            'disc_max_conv_blocks': state.get('disc_max_conv_blocks'),
+            'gen_max_conv_blocks': state.get('gen_max_conv_blocks'),
+            
+            'lambda_cond_loss': state.get('lambda_cond_loss'),
+            'lambda_info_loss': state.get('lambda_info_loss'),
+            'lambda_aux_classifier_loss': state.get('lambda_aux_classifier_loss'),
+            
+            'ci_discriminator_steps': state.get('ci_discriminator_steps'),
+            'verbose': state.get('verbose', False)
+        }
+        
+        # Initialize new instance
+        model = cls(**init_params)
+        
+        # Load internal state
+        model.synthesizer.load_state(state['synthesizer_state'])
+        model.data_prep = state['data_prep']
+        
+        return model
 
     def generate_samples(self, num_samples=None):
         if self.verbose:
