@@ -210,6 +210,12 @@ final_synthetic_data_path = os.path.join(data_folder, "travel_survey_generated.c
 final_synthetic_data.to_csv(final_synthetic_data_path, index=False, encoding='utf-8-sig')
 print(f"Final synthetic data generated with best hyperparameters saved to: {final_synthetic_data_path}")
 
+# Save the trained model
+import datetime
+timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+model_save_path = os.path.join(data_folder, f"ctabgan_model_{timestamp}.pth")
+synthesizer_best.save(model_save_path)
+print(f"Trained CTABGAN model saved to: {model_save_path}")
 
 # ============================================================
 # Data Quality Analysis and Visualization
